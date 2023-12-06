@@ -27,6 +27,9 @@ def parse_args():
     parser.add_argument("--use_volta32", action='store_true', help="Request 32G V100 GPUs")
     parser.add_argument("--use_a100", action='store_true', help="Request A100 GPUs")
     parser.add_argument('--comment', default="", type=str, help="Comment to pass to scheduler")
+    parser.add_argument('--wandb', action='store_true', help="Use wandb for logging")
+    parser.add_argument('--fourier', action='store_true', help="Use fourier features.")
+    parser.add_argument('--scaling', default=1.0, type=float, help="Scaling factor for input data.")
     return parser.parse_args()
 
 

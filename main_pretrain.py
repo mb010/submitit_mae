@@ -24,7 +24,6 @@ import torchvision.datasets as datasets
 
 import timm
 
-assert timm.__version__ == "0.3.2"  # version check
 import timm.optim.optim_factory as optim_factory
 
 import util.misc as misc
@@ -105,7 +104,17 @@ def get_args_parser():
 
 
 def main(args):
+    if args.wandb:
+        import wandb
+        wandb.init(project="F-MAE", config=args, sync_tensorboard=True)
+        os.environ['WANDB_WATCH'] = 'all'
+        os.environ['WANDB_CACHE_DIR'] = f'{args.job_dir}/wandb_cache'
+        os.environ['WANDB_DIR'] = f'{args.job_dir}/wandb'
+        os.environ['WANDB_ARTIFACT_DIR'] = f'{args.job_dir}/wandb_artifacts'
+        os.environ['WANDB_DATA_DIR'] = f'{args.job_dir}/wandb_data'
+
     misc.init_distributed_mode(args)
+
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
     print("{}".format(args).replace(', ', ',\n'))
@@ -119,12 +128,13 @@ def main(args):
 
     cudnn.benchmark = True
 
-    # simple augmentation
+    # simple augmentation # TODO: Compose my transformations here? Or as part of patchify?
     transform_train = transforms.Compose([
             transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+    # TODO: Define other options for datasets here.
     dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
     print(dataset_train)
 
@@ -174,9 +184,9 @@ def main(args):
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
-    
+
     # following timm: set wd as 0 for bias and norm layers
-    param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
+    param_groups = optim_factory.param_groups_weight_decay(model_without_ddp, weight_decay=args.weight_decay)
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
     print(optimizer)
     loss_scaler = NativeScaler()
@@ -201,6 +211,7 @@ def main(args):
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                         'epoch': epoch,}
+        # TODO: Add log_stats to wandb if wandb active
 
         if args.output_dir and misc.is_main_process():
             if log_writer is not None:
